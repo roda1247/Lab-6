@@ -11,6 +11,8 @@ The data come to us from [TidyTuesday](https://github.com/rfordatascience/tidytu
 #| label: setup
 library(tidyverse)
 library(dplyr)
+library(forcats)
+library(ggplot2)
 ```
 
 ```{r}
@@ -35,8 +37,12 @@ Let's start by focusing only on California.
 
 ```{r}
 #| label: ca-childcare-costs
+
 ca_childcare <- childcare_costs |> 
-  full_join(childcare_costs, counties, by ="county_fips_code")
+  left_join(counties, by ="county_fips_code") |> 
+  filter(state_name == "California") |> 
+  select(c("study_year", "mcsa", "mc_infant", "mc_toddler", 
+           "mc_preschool", "mhi_2018", "county_name"))
 ```
 
 **3. Using a function from the `forcats` package, complete the code below to create a new variable where each county is categorized into one of the [10 Census regions](https://census.ca.gov/regions/) in California. Use the Region description (from the plot), not the Region number. An example region has been started for you.**  
@@ -48,9 +54,26 @@ ca_childcare <- childcare_costs |>
 
 ca_childcare <- ca_childcare |> 
   mutate(county_name = str_remove(county_name, " County")) |> 
-  mutate(region = fct_______(county_name,
-    'Superior California' = c("Butte", "Colusa", "El Dorado". ...),
-     ...
+  mutate(region = fct_collapse(county_name,
+    'Superior California' = c("Butte", "Colusa", "El Dorado", "Glenn", 
+                              "Lassen", "Modoc", "Nevada", "Placer", "Plumas",
+                              "Sacramento", "Shasta", "Sierra", "Siskiyou", 
+                              "Sutter", "Tehama", "Yolo", "Yuba"),
+    'North Coast' = c("Del Norte", "Humboldt", "Lake", "Mendocino", "Napa", 
+                      "Sonoma", "Trinity"),
+    'San Fransisco Bay Area' = c("Alameda", "Contra Costa", "Marin", 
+                                 "San Francisco", "San Mateo", "Santa Clara",
+                                 "Solano"),
+    'Northern San Joaquin Valley' = c("Alpine", "Amador", "Calaveras", 
+                                      "Madera", "Mariposa", "Merced", "Mono",
+                                      "San Joaquin", "Stanislaus", "Tuolumne"),
+    'Central Coast' = c("Monterey", "San Benito", "San Luis Obispo", 
+                        "Santa Barbara", "Santa Cruz", "Ventura"),
+    'Southern San Joaquin Valley' = c("Fresno", "Inyo", "Kern", "Kings", "Tulare"),
+    'Inland Empire' = c("Riverside", "San Bernardino"),
+    'Los Angeles County' = c("Los Angeles"),
+    'Orange County' = c("Orange"),
+    'San Diego' = c("Imperial", "San Diego")
     ))
 ```
 
@@ -61,7 +84,12 @@ ca_childcare <- ca_childcare |>
 #| label: median-income-by-region-over-time
 # Hint: You will want to calculate the median of median income before you make columns for 2008/2018 by transforming the data
 
-
+income_by_region <- ca_childcare |> 
+  filter(study_year %in% c(2008, 2018)) |> 
+  group_by(region, study_year) |> 
+  summarize(median_income = median(mhi_2018, na.rm = TRUE), .groups = "drop") |> 
+  pivot_wider(names_from = study_year, values_from = median_income) |> 
+  arrange(desc(`2018`))
 ```
 
 
@@ -71,9 +99,16 @@ ca_childcare <- ca_childcare |>
 
 ```{r}
 #| label: lowest-median-weekly-price-2018
-
+ca_childcare |> 
+  filter(study_year == 2018) |> 
+  group_by(region) |> 
+  summarize(median_weekly_cost = median(mc_infant, na.rm = TRUE), 
+            .groups = "drop") |> 
+  arrange(median_weekly_cost) |> 
+  slice(1)
 
 ```
+> The region with the lowest is Superior California but it does not correspond with output from question 4.
 
 **6. Recreate the plot (look at online instructions) that shows, for all ten regions, the change over time of the full-time median price for center-based childcare for infants, toddlers, and preschoolers. Recreate the plot. You do not have to replicate the exact colors or theme, but your plot should have the same content, including the order of the facets and legend, reader-friendly labels, axes breaks, and a  smooth function.**
 
@@ -81,6 +116,51 @@ ca_childcare <- ca_childcare |>
 ```{r}
 #| label: recreate-plot
 
+childcare_long <- ca_childcare |> 
+  select(study_year, region,
+         mc_infant,
+         mc_toddler,
+         mc_preschool) |> 
+  pivot_longer(
+    cols = contains("mc_"),
+    names_to = "age_group",
+    values_to = "weekly_cost") |> 
+  mutate(age_group = recode(age_group,
+                            "mc_infant" = "Infant",
+                            "mc_toddler" = "Toddler",
+                            "mc_preschool" = "Preschool")) |> 
+  mutate(region = factor(region, levels = c("San Fransisco Bay Area", 
+                                                 "Orange County", 
+                                                 "Los Angeles County",
+                                                 "Northern San Joaquin Valley",
+                                                 "Central Coast",
+                                                 "Inland Empire",
+                                                 "Superior California",
+                                                 "Southern San Joaquin Valley",
+                                                 "San Diego-Imperial",
+                                                 "North Coast"
+                                                 )),
+         age_group = factor(age_group, levels = c("Infant", "Toddler", "Preschool")))
+
+
+ggplot(childcare_long, aes(x=study_year, y=weekly_cost, color=region)) +
+  geom_point()+
+  geom_smooth()+
+  theme_bw()+
+  labs(title="Weekly Median Price for Center-Based Childcare ($)",
+       x= "Study Year",
+       y="",
+       color="California Region")+
+  facet_wrap(~age_group)
+  
+
 ```
+
+
+
+
+
+
+
 
 
